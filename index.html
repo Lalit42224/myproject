@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Snake Adventure V2</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #1e272e;
+      color: #f1f2f6;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      margin: 0;
+    }
+    h1 {
+      color: #ffd32a;
+      text-align: center;
+      margin: 10px 0;
+    }
+    #game-container {
+      position: relative;
+      background-color: #2f3640;
+      border: 4px solid #ffdd59;
+      border-radius: 10px;
+      touch-action: none;
+    }
+    .snake, .coin, .wall, .trap {
+      position: absolute;
+    }
+    .snake { background-color: lightgreen; border: 1px solid black; border-radius: 3px; }
+    .coin {
+      background-color: gold;
+      border-radius: 50%;
+      box-shadow: 0 0 5px gold;
+    }
+    .wall {
+      background-color: #e84118;
+      border-radius: 4px;
+    }
+    .trap {
+      background-color: purple;
+      border-radius: 4px;
+      box-shadow: 0 0 6px violet;
+    }
+    #info-panel {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      font-size: 18px;
+      justify-content: center;
+    }
+    #score, #level, #health {
+      padding: 10px 20px;
+      font-weight: bold;
+      border-radius: 25px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    #score { background: linear-gradient(145deg, #ff6b6b, #ff4757); }
+    #level { background: linear-gradient(145deg, #1e90ff, #3742fa); }
+    #health { background: linear-gradient(145deg, #ffa502, #ff6348); }
+    #game-over {
+      margin-top: 15px;
+      font-size: 24px;
+      font-weight: bold;
+      color: red;
+      display: none;
+    }
+    #restart {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #00cec9;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      display: none;
+    }
+    #restart:hover { background-color: #00b894; }
+
+    #touch-controls {
+      margin-top: 20px;
+      display: none;
+      user-select: none;
+    }
+    #touch-controls .row {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 5px;
+    }
+    .arrow-btn {
+      width: 60px;
+      height: 60px;
+      font-size: 2rem;
+      background: #222f3e;
+      color: #ffd32a;
+      border: 2px solid #ffdd59;
+      border-radius: 50%;
+      margin: 0 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .arrow-btn:active {
+      background: #ffdd59;
+      color: #222f3e;
+      transform: scale(0.95);
+    }
+    @media (max-width: 600px) {
+      #game-container {
+        max-width: 100vw;
+        max-height: 100vw;
+      }
+      #touch-controls {
+        display: block;
+      }
+      .arrow-btn {
+        width: 48px;
+        height: 48px;
+        font-size: 1.5rem;
+        margin: 0 5px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>🐍 Snake Adventure V2</h1>
+  <div id="game-container"></div>
+  <div id="info-panel">
+    <div id="score">🎯 Score: 0</div>
+    <div id="level">🧪 Level: 1</div>
+    <div id="health">💖 Health: ❤️❤️❤️</div>
+  </div>
+  <div id="game-over">💀 Game Over! 💀</div>
+  <button id="restart" onclick="startGame()">🔁 Restart</button>
+
+  <!-- Sounds -->
+  <audio id="coin-sound" src="eating-chips-81092-[AudioTrimmer.com].mp3"></audio>
+  <audio id="hit-sound" src=""></audio>
+  <audio id="gameover-sound" src="game-over-deep-male-voice-clip-352695.mp3"></audio>
+
+  <!-- On-screen Controls -->
+  <div id="touch-controls">
+    <div class="row">
+      <button class="arrow-btn" id="btn-up">▲</button>
+    </div>
+    <div class="row">
+      <button class="arrow-btn" id="btn-left">◀</button>
+      <button class="arrow-btn" id="btn-down">▼</button>
+      <button class="arrow-btn" id="btn-right">▶</button>
+    </div>
+  </div>
+
+  <script>
+    const container = document.getElementById("game-container");
+    const scoreDisplay = document.getElementById("score");
+    const levelDisplay = document.getElementById("level");
+    const healthDisplay = document.getElementById("health");
+    const gameOverText = document.getElementById("game-over");
+    const restartBtn = document.getElementById("restart");
+    const coinSound = document.getElementById("coin-sound");
+    const hitSound = document.getElementById("hit-sound");
+    const gameoverSound = document.getElementById("gameover-sound");
+
+    const gridSize = 20;
+    let boxSize;
+
+    let snake, direction, coin, score, interval;
+    let walls = [], traps = [];
+    let health = 3, level = 1, coinsCollected = 0;
+    const coinsPerLevel = 5;
+
+    function calculateBoxSize() {
+      const size = Math.min(window.innerWidth - 40, 400);
+      boxSize = Math.floor(size / gridSize);
+      container.style.width = container.style.height = boxSize * gridSize + "px";
+    }
+
+    function startGame() {
+      calculateBoxSize();
+      snake = [{ x: 5, y: 5 }];
+      direction = { x: 1, y: 0 };
+      score = 0; health = 3; level = 1; coinsCollected = 0;
+      updateHealth();
+      scoreDisplay.textContent = "🎯 Score: 0";
+      levelDisplay.textContent = "🧪 Level: 1";
+      createMaze(level);
+      placeCoin();
+      draw();
+      gameOverText.style.display = "none";
+      restartBtn.style.display = "none";
+      clearInterval(interval);
+      interval = setInterval(move, 200);
+    }
+
+    function updateHealth() {
+      healthDisplay.textContent = "💖 Health: " + "❤️".repeat(health);
+    }
+
+    function endGame() {
+      clearInterval(interval);
+      gameOverText.style.display = "block";
+      restartBtn.style.display = "inline-block";
+      gameoverSound.currentTime = 0;
+      gameoverSound.play();
+    }
+
+    function draw() {
+      container.innerHTML = "";
+      snake.forEach(p => drawPart("snake", p));
+      drawPart("coin", coin);
+      walls.forEach(w => drawPart("wall", w));
+      traps.forEach(t => drawPart("trap", t));
+    }
+
+    function drawPart(type, pos) {
+      const div = document.createElement("div");
+      div.className = type;
+      div.style.width = div.style.height = boxSize + "px";
+      div.style.left = pos.x * boxSize + "px";
+      div.style.top = pos.y * boxSize + "px";
+      container.appendChild(div);
+    }
+
+    function move() {
+      const head = { ...snake[0] };
+      head.x += direction.x;
+      head.y += direction.y;
+
+      if (head.x < 0 || head.y < 0 || head.x >= gridSize || head.y >= gridSize ||
+          walls.some(w => w.x === head.x && w.y === head.y) ||
+          snake.some(s => s.x === head.x && s.y === head.y)) {
+        handleDamage();
+        return;
+      }
+
+      if (traps.some(t => t.x === head.x && t.y === head.y)) {
+        handleDamage();
+      }
+
+      snake.unshift(head);
+      if (head.x === coin.x && head.y === coin.y) {
+        score++; coinsCollected++;
+        scoreDisplay.textContent = "🎯 Score: " + score;
+        coinSound.currentTime = 0;
+        coinSound.play();
+        if (coinsCollected >= coinsPerLevel) levelUp();
+        placeCoin();
+      } else {
+        snake.pop();
+      }
+      draw();
+    }
+
+    function handleDamage() {
+      health--;
+      updateHealth();
+      hitSound.currentTime = 0;
+      hitSound.play();
+      if (health <= 0) endGame();
+    }
+
+    function placeCoin() {
+      let newCoin;
+      do {
+        newCoin = { x: Math.floor(Math.random() * gridSize), y: Math.floor(Math.random() * gridSize) };
+      } while (
+        snake.some(p => p.x === newCoin.x && p.y === newCoin.y) ||
+        walls.some(w => w.x === newCoin.x && w.y === newCoin.y)
+      );
+      coin = newCoin;
+    }
+
+    function levelUp() {
+      level++;
+      coinsCollected = 0;
+      levelDisplay.textContent = "🧪 Level: " + level;
+      createMaze(level);
+      placeCoin();
+      clearInterval(interval);
+      interval = setInterval(move, Math.max(80, 200 - level * 20));
+    }
+
+    function createMaze(level) {
+      walls = [];
+      traps = [];
+      const wallCount = 10 + level * 5;
+      const trapCount = 3 + level * 2;
+      for (let i = 0; i < wallCount; i++) {
+        walls.push({ x: rand(), y: rand() });
+      }
+      for (let i = 0; i < trapCount; i++) {
+        traps.push({ x: rand(), y: rand() });
+      }
+    }
+
+    function rand() {
+      return Math.floor(Math.random() * gridSize);
+    }
+
+    // Controls
+    document.addEventListener("keydown", e => {
+      if (e.key === "ArrowUp" && direction.y !== 1) direction = { x: 0, y: -1 };
+      else if (e.key === "ArrowDown" && direction.y !== -1) direction = { x: 0, y: 1 };
+      else if (e.key === "ArrowLeft" && direction.x !== 1) direction = { x: -1, y: 0 };
+      else if (e.key === "ArrowRight" && direction.x !== -1) direction = { x: 1, y: 0 };
+    });
+
+    function setDirection(dir) {
+      if (dir === 'up' && direction.y !== 1) direction = { x: 0, y: -1 };
+      else if (dir === 'down' && direction.y !== -1) direction = { x: 0, y: 1 };
+      else if (dir === 'left' && direction.x !== 1) direction = { x: -1, y: 0 };
+      else if (dir === 'right' && direction.x !== -1) direction = { x: 1, y: 0 };
+    }
+
+    ['up', 'down', 'left', 'right'].forEach(dir => {
+      document.getElementById(`btn-${dir}`).addEventListener('touchstart', e => {
+        e.preventDefault(); setDirection(dir);
+      });
+      document.getElementById(`btn-${dir}`).addEventListener('click', () => setDirection(dir));
+    });
+
+    window.addEventListener("resize", () => {
+      calculateBoxSize();
+      draw();
+    });
+
+    startGame();
+  </script>
+</body>
+</html>
